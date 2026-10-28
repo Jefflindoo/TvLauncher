@@ -12,7 +12,10 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Extrair Projeto
-      run: unzip TvLauncher.zip -d .
+      run: |
+        unzip TvLauncher.zip -d projeto_extraido
+        echo "Conteudo extraido:"
+        ls -R projeto_extraido
       
     - name: Configurar Java 17
       uses: actions/setup-java@v4
@@ -22,6 +25,7 @@ jobs:
 
     - name: Compilar APK
       run: |
+        cd projeto_extraido/TvLauncher
         if [ -f "./gradlew" ]; then
           chmod +x gradlew
           ./gradlew assembleDebug
