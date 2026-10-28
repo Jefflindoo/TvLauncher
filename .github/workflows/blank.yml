@@ -1,44 +1,88 @@
-name: Generate Perfect APK
+name: "Ultra Advanced Android APK Compiler"
 
 on:
   push:
     branches: [ "main", "master", "principal" ]
   workflow_dispatch:
 
+env:
+  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: "24"
+  NODE_NO_WARNINGS: "1"
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs='-Xmx4g -XX:+HeapDumpOnOutOfMemoryError' -Dorg.gradle.logging.level=lifecycle"
+
 jobs:
-  build:
+  android-build-pipeline:
+    name: "Execute Advanced Android Compilation Process"
     runs-on: ubuntu-latest
-    steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
     
-    - name: Extract Project Files
+    steps:
+    - name: "Step 1: Download Repository Source Code"
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: "Step 2: Initialize Environment and Extract Zip File safely"
+      id: extract_zip_step
       run: |
-        unzip TvLauncher.zip -d extracted_root
-        PROJECT_DIR=$(find extracted_root -name "build.gradle*" -exec dirname {} \; | head -n 1)
-        echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
-        echo "Successfully located Android project root at: $PROJECT_DIR"
-      
-    - name: Setup Java JDK 17
+        echo "Starting extraction process..."
+        if [ ! -f "TvLauncher.zip" ]; then
+          echo "::error::Critical Error: TvLauncher.zip was not found in the root directory!"
+          exit 1
+        fi
+        
+        unzip -q TvLauncher.zip -d target_extraction_directory
+        rm -rf target_extraction_directory/__MACOSX
+        
+        echo "Searching for Android build configuration files inside target directory..."
+        ROOT_DETECTED_DIR=$(find target_extraction_directory -name "build.gradle*" -exec dirname {} \; | head -n 1)
+        
+        if [ -z "$ROOT_DETECTED_DIR" ]; then
+          echo "::error::Critical Error: Could not locate build.gradle or build.gradle.kts inside the ZIP archive!"
+          exit 1
+        fi
+        
+        echo "PROJECT_ABS_PATH=$ROOT_DETECTED_DIR" >> $GITHUB_ENV
+        echo "Successfully located Android project root structure at: $ROOT_DETECTED_DIR"
+
+    - name: "Step 3: Setup Java Development Kit JDK 17 with Performance Cache"
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
+        cache: 'gradle'
 
-    - name: Build Android APK
+    - name: "Step 4: Grant Permissions and Verify Repository Settings"
       run: |
-        cd ${{ env.PROJECT_PATH }}
+        cd ${{ env.PROJECT_ABS_PATH }}
+        echo "Generating fresh local.properties file..."
         echo "sdk.dir=$ANDROID_HOME" > local.properties
-        chmod +x gradlew 2>/dev/null || true
+        echo "ndk.dir=$ANDROID_HOME/ndk" >> local.properties
         
         if [ -f "./gradlew" ]; then
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          echo "Setting execution permissions for local Gradle wrapper..."
+          chmod +x gradlew
         else
-          gradle assembleDebug --no-daemon --stacktrace
+          echo "Local gradlew wrapper missing, relying on global environment installation."
         fi
-      
-    - name: Upload Finished APK
+
+    - name: "Step 5: Run Advanced Gradle Application Compilation"
+      run: |
+        cd ${{ env.PROJECT_ABS_PATH }}
+        echo "Executing build tasks and assembling final package..."
+        
+        if [ -f "./gradlew" ]; then
+          ./gradlew assembleDebug --no-daemon --stacktrace --scan --warning-mode all
+        else
+          gradle assembleDebug --no-daemon --stacktrace --warning-mode all
+        fi
+
+    - name: "Step 6: Locate and Export Finished Production APK Package"
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: Finished-APK-Download
-        path: '**/build/outputs/apk/debug/*.apk'
+        name: "Jeff-TvLauncher-Official-APK"
+        path: |
+          **/build/outputs/apk/debug/*.apk
+          **/build/outputs/apk/release/*.apk
+        if-no-files-found: error
+        retention-days: 7
