@@ -1,0 +1,56 @@
+name: Generate Perfect APK Java 17
+
+on:
+  push:
+    branches: [ "main", "master", "principal" ]
+  workflow_dispatch:
+
+env:
+  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: "24"
+  NODE_NO_WARNINGS: "1"
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.logging.level=lifecycle"
+
+jobs:
+  build:
+    name: Build Android Package
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Extract Project Files Safely
+      run: |
+        unzip -q TvLauncher.zip -d extracted_root
+        rm -rf extracted_root/__MACOSX
+        PROJECT_DIR=$(find extracted_root -name "build.gradle*" -exec dirname {} \; | head -n 1)
+        echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
+        echo "Successfully located Android project root at: $PROJECT_DIR"
+
+    - name: Setup Java JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Configure Android SDK Path
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        echo "sdk.dir=$ANDROID_HOME" > local.properties
+        chmod +x gradlew 2>/dev/null || true
+
+    - name: Build Android APK
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        if [ -f "./gradlew" ]; then
+          ./gradlew assembleDebug --no-daemon -Xmx4g || ./gradlew assembleDebug --no-daemon -Xmx4g --warning-mode none
+        else
+          gradle assembleDebug --no-daemon -Xmx4g || gradle assembleDebug --no-daemon -Xmx4g --warning-mode none
+        fi
+
+    - name: Upload Finished APK
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Finished-APK-Download
+        path: '**/build/outputs/apk/debug/*.apk'
